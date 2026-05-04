@@ -1,5 +1,6 @@
 """
 Urbanista Monday Brief — Agent
+Forces current week news with date-aware prompts.
 """
 
 import os, sys, json, datetime, re, requests, anthropic
@@ -7,38 +8,49 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 MODEL = "claude-sonnet-4-6"
 
-SECTIONS = [
-    {
-        "key": "market",
-        "label": "Market Update",
-        "emoji": "🌍",
-        "prompt": 'Search for recent news about the consumer audio market (headphones, earphones, speakers) in North America and Europe. Find 3 interesting findings. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"NA","headline":"Battery life now top purchase driver","body":"NPD data shows battery life overtook ANC as the top purchase driver in North America in 2025. Brands leading on endurance messaging are outperforming at retail.","url":"https://www.npd.com","source":"NPD"},{"tag":"EU","headline":"Mid-tier ASP drops 8% in Europe","body":"GfK reports average selling prices in the €79-129 headphone tier fell 8% YoY as Chinese brands expand. Premium segment remains stable.","url":"https://www.gfk.com","source":"GfK"},{"tag":"AU","headline":"Speakers outsell headphones in Australia","body":"Portable Bluetooth speakers grew 14% YoY in Australia while headphone units stayed flat. Outdoor lifestyle is driving the shift.","url":"https://www.gfk.com","source":"GfK AU"}]}'
-    },
-    {
-        "key": "product",
-        "label": "Product News",
-        "emoji": "🎯",
-        "prompt": 'Search for recent news about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Find 3 notable product or business updates. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"Nothing","headline":"Nothing Ear 3 sells out in 48h","body":"Nothing sold out its EU stock of the Ear 3 at €129 within 48 hours of launch. The drops model is proving effective at driving urgency.","url":"https://nothing.tech","source":"Nothing Tech"},{"tag":"JBL","headline":"JBL Tour Pro 3 launches at €249","body":"JBL released the Tour Pro 3 with a touchscreen charging case. Heavy retail placement across EU from May 12.","url":"https://www.jbl.com","source":"JBL"},{"tag":"Soundcore","headline":"Liberty 4 Pro at €79 with ANC","body":"Soundcore continues aggressive mid-tier expansion with ANC at €79. Strong Amazon placement is driving high review velocity.","url":"https://www.soundcore.com","source":"Soundcore"}]}'
-    },
-    {
-        "key": "retail",
-        "label": "Retail",
-        "emoji": "🏪",
-        "prompt": 'Search for recent news about consumer electronics retail — Best Buy, MediaMarkt, Amazon audio, DTC trends, airport retail. Find 3 relevant updates. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"Best Buy","headline":"Best Buy cuts audio floor space 12%","body":"Best Buy reduced audio fixture space in its 2025 reset. Low-ASP SKUs are being delisted first while premium brands hold position.","url":"https://corporate.bestbuy.com","source":"Best Buy"},{"tag":"Amazon","headline":"Premium audio search up 34% on Amazon","body":"Amazon data shows premium audio search terms growing 34% YoY. A+ Content and video are now mandatory for conversion at this tier.","url":"https://www.amazon.com","source":"Amazon"},{"tag":"Airports","headline":"Travel retail pushes premium audio","body":"WHSmith and Heinemann are actively expanding premium audio ranges. High-income travellers are an ideal profile for impulse purchase.","url":"https://www.heinemann.com","source":"Heinemann"}]}'
-    },
-    {
-        "key": "compliance",
-        "label": "Compliance",
-        "emoji": "⚖️",
-        "prompt": 'Search for recent regulatory news for consumer electronics in EU, US, UK, Canada, Australia. Look for FCC notices, battery regulations, CE/UKCA updates. Find 3 updates. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"EU","headline":"EU Battery Regulation QR labelling from Aug 18","body":"QR codes linking to battery data become mandatory for all portable batteries in the EU from August 18 2025. All active SKUs need updated packaging.","url":"https://eur-lex.europa.eu","source":"EUR-Lex"},{"tag":"US","headline":"FCC proposes tighter RF limits for wearables","body":"A new NPRM would tighten SAR testing for devices worn near the head. Comment period open until July 15 2025.","url":"https://www.fcc.gov","source":"FCC"},{"tag":"Canada","headline":"ICES-003 updated to include TWS devices","body":"ISED Canada revised ICES-003 to explicitly list TWS and wireless headphones. Updated compliance statements required for Canadian market access.","url":"https://www.ic.gc.ca","source":"ISED Canada"}]}'
-    },
-    {
-        "key": "ai",
-        "label": "AI Tips & Tricks",
-        "emoji": "✦",
-        "prompt": 'Search for practical AI tips for small product companies with 10-20 employees. Find 3 actionable use cases for Finance, Operations, Logistics, or Sales using Claude, ChatGPT, Copilot, or Zapier. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"Finance","headline":"Automate FX exposure summaries from ERP exports","body":"Feed Claude your multi-currency revenue export and ask for a plain-English FX risk summary. Saves 2-3 hours per week with no integration required.","url":"https://www.anthropic.com","source":"Anthropic"},{"tag":"Sales","headline":"Generate retailer pitches in under 60 seconds","body":"Prompt Claude with a retailer profile and your product brief to get a tailored pitch, objection handlers, and talking points instantly.","url":"https://www.anthropic.com","source":"Anthropic"},{"tag":"Operations","headline":"AI purchase order review cuts approval time 60%","body":"Use AI to pre-screen POs against policy rules before human review. Flags duplicates, out-of-policy spend, and pricing anomalies automatically.","url":"https://zapier.com","source":"Zapier"}]}'
+def get_date_context():
+    now = datetime.datetime.now()
+    week_start = now - datetime.timedelta(days=now.weekday())
+    return {
+        "today": now.strftime("%B %d, %Y"),
+        "week_start": week_start.strftime("%B %d, %Y"),
+        "month": now.strftime("%B %Y"),
+        "year": str(now.year)
     }
-]
+
+def make_sections(d):
+    return [
+        {
+            "key": "market",
+            "label": "Market Update",
+            "emoji": "🌍",
+            "prompt": f'Today is {d["today"]}. Search for NEWS published this week (after {d["week_start"]}) about the consumer audio market — headphones, earphones, Bluetooth speakers — in North America, Europe, UK, Australia and New Zealand. Search specifically for: "headphone market {d["month"]}", "audio sales {d["year"]}", "consumer electronics news {d["today"]}". Find 5 actual news stories published recently. For each use the real URL of the article. Return ONLY this JSON with no other text:\n{{"items":[{{"tag":"region","headline":"actual news headline from this week","body":"What happened and why it matters. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+        },
+        {
+            "key": "product",
+            "label": "Product News",
+            "emoji": "🎯",
+            "prompt": f'Today is {d["today"]}. Search for NEWS published this week (after {d["week_start"]}) about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Search for: "Nothing audio {d["month"]}", "JBL new {d["month"]}", "Soundcore {d["month"]}", "Marshall headphones news {d["year"]}", "Sudio {d["year"]}". Find 5 actual recent news stories — product launches, campaigns, pricing, retail moves. Use real article URLs. Return ONLY this JSON:\n{{"items":[{{"tag":"Brand","headline":"actual news headline","body":"What happened. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+        },
+        {
+            "key": "retail",
+            "label": "Retail",
+            "emoji": "🏪",
+            "prompt": f'Today is {d["today"]}. Search for NEWS published this week (after {d["week_start"]}) about consumer electronics retail. Search for: "Best Buy {d["month"]}", "MediaMarkt {d["month"]}", "Amazon electronics {d["month"]}", "airport retail {d["year"]}", "DTC ecommerce {d["month"]}". Find 5 actual recent news stories about retail changes, shelf resets, sales data, DTC trends, or travel retail. Use real article URLs. Return ONLY this JSON:\n{{"items":[{{"tag":"Retailer","headline":"actual news headline","body":"What happened. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+        },
+        {
+            "key": "compliance",
+            "label": "Compliance",
+            "emoji": "⚖️",
+            "prompt": f'Today is {d["today"]}. Search for regulatory and compliance NEWS published recently (after {d["week_start"]}) affecting consumer electronics in EU, US, UK, Canada, Australia. Search for: "FCC ruling {d["month"]}", "EU electronics regulation {d["month"]}", "UKCA compliance {d["year"]}", "battery regulation {d["month"]}", "consumer electronics compliance {d["month"]}". Find 5 actual recent regulatory updates, notices, or enforcement actions. Use real URLs to official sources or news articles. Return ONLY this JSON:\n{{"items":[{{"tag":"Market","headline":"actual regulatory headline","body":"What changed and the implication. 2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}}]}}'
+        },
+        {
+            "key": "ai",
+            "label": "AI Tips & Tricks",
+            "emoji": "✦",
+            "prompt": f'Today is {d["today"]}. Search for practical AI news and tips published recently (after {d["week_start"]}) for small businesses and product companies (10-20 people). Search for: "AI for small business {d["month"]}", "Claude tips {d["month"]}", "ChatGPT workflow {d["month"]}", "AI productivity {d["month"]}", "AI tools {d["month"]}". Find 5 actionable and current AI use cases or tool updates relevant to Finance, Operations, Logistics, Sales, or Product. Use real article URLs. Return ONLY this JSON:\n{{"items":[{{"tag":"Function","headline":"actual tip or news headline","body":"What it is and how to use it. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+        }
+    ]
 
 
 def research_section(section):
@@ -51,39 +63,56 @@ def research_section(section):
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": section["prompt"]}]
         )
-        # Print all text blocks for debugging
         text_blocks = [b.text for b in response.content if hasattr(b, "text") and b.text.strip()]
-        print(f"    Got {len(text_blocks)} text blocks")
-        for i, text in enumerate(text_blocks):
-            print(f"    Block {i}: {text[:200]}")
-            # Try to find JSON
+        for text in reversed(text_blocks):
             start = text.find('{')
             end = text.rfind('}') + 1
             if start >= 0 and end > start:
                 try:
                     result = json.loads(text[start:end])
                     if result.get("items"):
-                        result["items"] = result["items"][:3]
+                        result["items"] = result["items"][:5]
                         print(f"    ✓ {section['label']}: {len(result['items'])} items")
                         return section["key"], result
-                except json.JSONDecodeError as e:
-                    print(f"    JSON error in block {i}: {e}")
-        print(f"    ⚠️  No valid JSON found in any block")
+                except json.JSONDecodeError:
+                    pass
+        print(f"    ⚠️  No valid JSON found")
         return section["key"], {"items": []}
     except Exception as e:
         print(f"    ⚠️  Exception: {e}")
         return section["key"], {"items": []}
 
 
-def build_card(results, date_str, edition):
+def generate_intro(client, results):
+    print("  → ✍️  Writing intro...")
+    headlines = []
+    for section in make_sections(get_date_context())[:3]:
+        items = results.get(section["key"], {}).get("items", [])
+        if items:
+            headlines.append(items[0].get("headline", ""))
+    prompt = f"Write a 2-sentence editorial intro for Urbanista's Monday Brief — a weekly intelligence report for a premium audio brand. Tone: sharp, informed, like a smart colleague summarising the week. Based on these top stories this week: {' | '.join(headlines)}. Respond with ONLY the 2 sentences, nothing else."
+    try:
+        response = client.messages.create(
+            model=MODEL, max_tokens=150,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"    ⚠️  Intro error: {e}")
+        return "Another week of signals worth reading. Here's what moved in audio, retail, compliance, and AI."
+
+
+def build_card(results, intro, date_str, edition, sections):
     body = [
         {"type": "TextBlock", "text": f"URBANISTA MONDAY BRIEF · {edition}",
          "weight": "Bolder", "size": "Medium", "wrap": True},
         {"type": "TextBlock", "text": date_str,
-         "isSubtle": True, "size": "Small", "spacing": "None"}
+         "isSubtle": True, "size": "Small", "spacing": "None"},
+        {"type": "TextBlock", "text": intro,
+         "wrap": True, "size": "Medium", "spacing": "Medium", "isSubtle": True}
     ]
 
-    for section in SECTIONS:
+    for section in sections:
         items = results.get(section["key"], {}).get("items", [])
         body.append({
             "type": "TextBlock",
@@ -131,28 +160,35 @@ def main():
     now = datetime.datetime.now()
     date_str = now.strftime("%A, %-d %B %Y")
     edition = f"W{now.isocalendar()[1]} · {now.year}"
+    d = get_date_context()
+    sections = make_sections(d)
 
     print(f"\n📰 Urbanista Monday Brief — {date_str}")
+    print(f"   Searching for news from {d['week_start']} onwards")
     print("=" * 52)
     print("\n[1/3] Running all sections in parallel...")
 
+    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
     results = {}
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(research_section, s): s for s in SECTIONS}
+        futures = {executor.submit(research_section, s): s for s in sections}
         for future in as_completed(futures):
             key, data = future.result()
             results[key] = data
 
-    print("\n[2/3] Building card...")
-    card = build_card(results, date_str, edition)
+    print("\n[2/3] Writing intro and building card...")
+    intro = generate_intro(client, results)
+    card = build_card(results, intro, date_str, edition, sections)
 
     if dry_run:
         print("\n── DRY RUN ──")
-        for section in SECTIONS:
+        print(f"\nIntro: {intro}\n")
+        for section in sections:
             items = results[section["key"]].get("items", [])
-            print(f"\n{section['emoji']} {section['label']} ({len(items)} items)")
+            print(f"{section['emoji']} {section['label']} ({len(items)} items)")
             for item in items:
                 print(f"  • {item.get('headline','')}")
+                print(f"    {item.get('url','')}")
     else:
         print("\n[3/3] Posting to Teams...")
         r = requests.post(os.environ["TEAMS_WEBHOOK_URL"], json=card,
