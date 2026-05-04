@@ -1,11 +1,5 @@
 """
-Urbanista Monday Brief — Final Agent
-Runs all sections in parallel for speed. 3 items per section.
-
-Setup:
-  pip install anthropic requests
-  export ANTHROPIC_API_KEY=sk-ant-...
-  export TEAMS_WEBHOOK_URL=https://prod-xx.logic.azure.com/...
+Urbanista Monday Brief — Agent
 """
 
 import os, sys, json, datetime, re, requests, anthropic
@@ -18,85 +12,67 @@ SECTIONS = [
         "key": "market",
         "label": "Market Update",
         "emoji": "🌍",
-        "prompt": """Search the web for latest news (past 2 weeks) about the consumer audio market — TWS, headphones, speakers — in North America, Europe, UK, Australia, New Zealand. Find 3 findings about trends, pricing, or consumer behaviour.
-
-Respond with ONLY this JSON, no other text:
-{"items":[{"tag":"Region","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Region","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Region","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"}]}"""
+        "prompt": 'Search for recent news about the consumer audio market (headphones, earphones, speakers) in North America and Europe. Find 3 interesting findings. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"NA","headline":"Battery life now top purchase driver","body":"NPD data shows battery life overtook ANC as the top purchase driver in North America in 2025. Brands leading on endurance messaging are outperforming at retail.","url":"https://www.npd.com","source":"NPD"},{"tag":"EU","headline":"Mid-tier ASP drops 8% in Europe","body":"GfK reports average selling prices in the €79-129 headphone tier fell 8% YoY as Chinese brands expand. Premium segment remains stable.","url":"https://www.gfk.com","source":"GfK"},{"tag":"AU","headline":"Speakers outsell headphones in Australia","body":"Portable Bluetooth speakers grew 14% YoY in Australia while headphone units stayed flat. Outdoor lifestyle is driving the shift.","url":"https://www.gfk.com","source":"GfK AU"}]}'
     },
     {
         "key": "product",
         "label": "Product News",
         "emoji": "🎯",
-        "prompt": """Search the web for latest news (past 2 weeks) about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Find 3 notable updates — new products, pricing, or campaigns.
-
-Respond with ONLY this JSON, no other text:
-{"items":[{"tag":"Brand","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Brand","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Brand","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"}]}"""
+        "prompt": 'Search for recent news about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Find 3 notable product or business updates. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"Nothing","headline":"Nothing Ear 3 sells out in 48h","body":"Nothing sold out its EU stock of the Ear 3 at €129 within 48 hours of launch. The drops model is proving effective at driving urgency.","url":"https://nothing.tech","source":"Nothing Tech"},{"tag":"JBL","headline":"JBL Tour Pro 3 launches at €249","body":"JBL released the Tour Pro 3 with a touchscreen charging case. Heavy retail placement across EU from May 12.","url":"https://www.jbl.com","source":"JBL"},{"tag":"Soundcore","headline":"Liberty 4 Pro at €79 with ANC","body":"Soundcore continues aggressive mid-tier expansion with ANC at €79. Strong Amazon placement is driving high review velocity.","url":"https://www.soundcore.com","source":"Soundcore"}]}'
     },
     {
         "key": "retail",
         "label": "Retail",
         "emoji": "🏪",
-        "prompt": """Search the web for latest news (past 2 weeks) about consumer electronics retail — Best Buy, MediaMarkt, Currys, Amazon audio, DTC trends, airport retail. Find 3 relevant updates.
-
-Respond with ONLY this JSON, no other text:
-{"items":[{"tag":"Retailer","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Retailer","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Retailer","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"}]}"""
+        "prompt": 'Search for recent news about consumer electronics retail — Best Buy, MediaMarkt, Amazon audio, DTC trends, airport retail. Find 3 relevant updates. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"Best Buy","headline":"Best Buy cuts audio floor space 12%","body":"Best Buy reduced audio fixture space in its 2025 reset. Low-ASP SKUs are being delisted first while premium brands hold position.","url":"https://corporate.bestbuy.com","source":"Best Buy"},{"tag":"Amazon","headline":"Premium audio search up 34% on Amazon","body":"Amazon data shows premium audio search terms growing 34% YoY. A+ Content and video are now mandatory for conversion at this tier.","url":"https://www.amazon.com","source":"Amazon"},{"tag":"Airports","headline":"Travel retail pushes premium audio","body":"WHSmith and Heinemann are actively expanding premium audio ranges. High-income travellers are an ideal profile for impulse purchase.","url":"https://www.heinemann.com","source":"Heinemann"}]}'
     },
     {
         "key": "compliance",
         "label": "Compliance",
         "emoji": "⚖️",
-        "prompt": """Search the web for latest regulatory news (past 4 weeks) for consumer electronics in EU, US, UK, Canada, Australia, New Zealand. Look for FCC notices, battery regulations, CE/UKCA updates, labelling rules. Find 3 updates.
-
-Respond with ONLY this JSON, no other text:
-{"items":[{"tag":"Market","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Market","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Market","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"}]}"""
+        "prompt": 'Search for recent regulatory news for consumer electronics in EU, US, UK, Canada, Australia. Look for FCC notices, battery regulations, CE/UKCA updates. Find 3 updates. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"EU","headline":"EU Battery Regulation QR labelling from Aug 18","body":"QR codes linking to battery data become mandatory for all portable batteries in the EU from August 18 2025. All active SKUs need updated packaging.","url":"https://eur-lex.europa.eu","source":"EUR-Lex"},{"tag":"US","headline":"FCC proposes tighter RF limits for wearables","body":"A new NPRM would tighten SAR testing for devices worn near the head. Comment period open until July 15 2025.","url":"https://www.fcc.gov","source":"FCC"},{"tag":"Canada","headline":"ICES-003 updated to include TWS devices","body":"ISED Canada revised ICES-003 to explicitly list TWS and wireless headphones. Updated compliance statements required for Canadian market access.","url":"https://www.ic.gc.ca","source":"ISED Canada"}]}'
     },
     {
         "key": "ai",
         "label": "AI Tips & Tricks",
         "emoji": "✦",
-        "prompt": """Search the web for practical AI tips for small product companies (10-20 people). Find 3 actionable AI use cases for Finance, Operations, Logistics, Sales, or Product teams — using tools like Claude, ChatGPT, Copilot, or Zapier.
-
-Respond with ONLY this JSON, no other text:
-{"items":[{"tag":"Function","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Function","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"},{"tag":"Function","headline":"short headline","body":"2 sentences.","url":"https://example.com","source":"Source Name"}]}"""
+        "prompt": 'Search for practical AI tips for small product companies with 10-20 employees. Find 3 actionable use cases for Finance, Operations, Logistics, or Sales using Claude, ChatGPT, Copilot, or Zapier. Return ONLY valid JSON in exactly this format, with no other text before or after:\n{"items":[{"tag":"Finance","headline":"Automate FX exposure summaries from ERP exports","body":"Feed Claude your multi-currency revenue export and ask for a plain-English FX risk summary. Saves 2-3 hours per week with no integration required.","url":"https://www.anthropic.com","source":"Anthropic"},{"tag":"Sales","headline":"Generate retailer pitches in under 60 seconds","body":"Prompt Claude with a retailer profile and your product brief to get a tailored pitch, objection handlers, and talking points instantly.","url":"https://www.anthropic.com","source":"Anthropic"},{"tag":"Operations","headline":"AI purchase order review cuts approval time 60%","body":"Use AI to pre-screen POs against policy rules before human review. Flags duplicates, out-of-policy spend, and pricing anomalies automatically.","url":"https://zapier.com","source":"Zapier"}]}'
     }
 ]
-
-
-def extract_json(text):
-    text = re.sub(r'```json|```', '', text).strip()
-    start = text.find('{')
-    end = text.rfind('}') + 1
-    if start >= 0 and end > start:
-        try:
-            return json.loads(text[start:end])
-        except json.JSONDecodeError:
-            pass
-    return None
 
 
 def research_section(section):
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
     print(f"  → {section['emoji']} {section['label']}...")
-    for attempt in range(2):
-        try:
-            response = client.messages.create(
-                model=MODEL,
-                max_tokens=2000,
-                tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=[{"role": "user", "content": section["prompt"]}]
-            )
-            text_blocks = [b.text for b in response.content if hasattr(b, "text") and b.text.strip()]
-            for text in reversed(text_blocks):
-                result = extract_json(text)
-                if result and result.get("items"):
-                    # Cap at 3 items
-                    result["items"] = result["items"][:3]
-                    print(f"    ✓ {section['label']}: {len(result['items'])} items")
-                    return section["key"], result
-            print(f"    ⚠️  {section['label']}: no JSON (attempt {attempt+1})")
-        except Exception as e:
-            print(f"    ⚠️  {section['label']}: error (attempt {attempt+1}): {e}")
-    return section["key"], {"items": []}
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=3000,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": section["prompt"]}]
+        )
+        # Print all text blocks for debugging
+        text_blocks = [b.text for b in response.content if hasattr(b, "text") and b.text.strip()]
+        print(f"    Got {len(text_blocks)} text blocks")
+        for i, text in enumerate(text_blocks):
+            print(f"    Block {i}: {text[:200]}")
+            # Try to find JSON
+            start = text.find('{')
+            end = text.rfind('}') + 1
+            if start >= 0 and end > start:
+                try:
+                    result = json.loads(text[start:end])
+                    if result.get("items"):
+                        result["items"] = result["items"][:3]
+                        print(f"    ✓ {section['label']}: {len(result['items'])} items")
+                        return section["key"], result
+                except json.JSONDecodeError as e:
+                    print(f"    JSON error in block {i}: {e}")
+        print(f"    ⚠️  No valid JSON found in any block")
+        return section["key"], {"items": []}
+    except Exception as e:
+        print(f"    ⚠️  Exception: {e}")
+        return section["key"], {"items": []}
 
 
 def build_card(results, date_str, edition):
