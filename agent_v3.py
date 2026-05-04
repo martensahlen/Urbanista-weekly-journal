@@ -57,7 +57,6 @@ Return ONLY a JSON object — no markdown, no preamble:
   "items": [
     {ITEM_SCHEMA},
     {ITEM_SCHEMA},
-    {ITEM_SCHEMA},
     {ITEM_SCHEMA}
   ]
 }}
@@ -180,21 +179,34 @@ SECTION_META = [
 
 def research_section(client, key, section):
     print(f"  → {section['emoji']} Researching {section['label']}...")
-    response = client.messages.create(
-        model="claude-sonnet-4-5",
-        max_tokens=2000,
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
-        messages=[{"role": "user", "content": section["prompt"]}]
-    )
-    # Get the last text block (final answer after tool use)
-    text_blocks = [b for b in response.content if hasattr(b, "text")]
-    raw = text_blocks[-1].text if text_blocks else "{}"
-    raw = raw.replace("```json", "").replace("```", "").strip()
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        print(f"    ⚠️  JSON parse failed for {key}, returning empty")
-        return {"items": []}
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-5",
+                max_tokens=4000,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=[{"role": "user", "content": section["prompt"]}]
+            )
+            text_blocks = [b for b in response.content if hasattr(b, "text")]
+            raw = text_blocks[-1].text if text_blocks else "{}"
+            raw = raw.replace("```json", "").replace("```", "").strip()
+            # Find JSON object in response
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            if start >= 0 and end > start:
+                raw = raw[start:end]
+            result = json.loads(raw)
+            print(f"    ✓ Got {len(result.get('items', []))} items")
+            return result
+        except json.JSONDecodeError as e:
+            print(f"    ⚠️  JSON parse failed (attempt {attempt+1}): {e}")
+            if attempt == 2:
+                return {"items": []}
+        except Exception as e:
+            print(f"    ⚠️  Error (attempt {attempt+1}): {e}")
+            if attempt == 2:
+                return {"items": []}
+    return {"items": []}
 
 
 def generate_intro(client, results):
