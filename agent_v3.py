@@ -181,7 +181,7 @@ SECTION_META = [
 def research_section(client, key, section):
     print(f"  → {section['emoji']} Researching {section['label']}...")
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5",
         max_tokens=2000,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         messages=[{"role": "user", "content": section["prompt"]}]
@@ -205,7 +205,7 @@ def generate_intro(client, results):
         for item in results.get(key, {}).get("items", [])[:1]
     ]
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5",
         max_tokens=150,
         messages=[{"role": "user", "content": f"""
 Write a 2-sentence editorial intro for Urbanista's Monday Brief.
@@ -225,7 +225,7 @@ def generate_watch_next(client, results):
         for item in results[key].get("items", [])
     )
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5",
         max_tokens=120,
         tools=[{"type": "web_search_20250305", "name": "web_search"}],
         messages=[{"role": "user", "content": f"""
