@@ -1,6 +1,6 @@
 """
 Urbanista Monday Brief — Agent
-Forces current week news with date-aware prompts.
+5 items per section, intro, date per item, 7-day news window.
 """
 
 import os, sys, json, datetime, re, requests, anthropic
@@ -10,7 +10,7 @@ MODEL = "claude-sonnet-4-6"
 
 def get_date_context():
     now = datetime.datetime.now()
-    week_start = now - datetime.timedelta(days=now.weekday())
+    week_start = now - datetime.timedelta(days=7)
     return {
         "today": now.strftime("%B %d, %Y"),
         "week_start": week_start.strftime("%B %d, %Y"),
@@ -18,37 +18,42 @@ def get_date_context():
         "year": str(now.year)
     }
 
+ITEM_TEMPLATE = '{"tag":"region","headline":"news headline","body":"2 sentences.","date":"May 5, 2026","url":"https://article-url.com","source":"Publisher"}'
+
 def make_sections(d):
+    items_template = ",".join([ITEM_TEMPLATE] * 5)
+    base = f'{{"items":[{items_template}]}}'
+
     return [
         {
             "key": "market",
             "label": "Market Update",
             "emoji": "🌍",
-            "prompt": f'Today is {d["today"]}. Search for NEWS published this week (after {d["week_start"]}) about the consumer audio market — headphones, earphones, Bluetooth speakers — in North America, Europe, UK, Australia and New Zealand. Search specifically for: "headphone market {d["month"]}", "audio sales {d["year"]}", "consumer electronics news {d["today"]}". Find 5 actual news stories published recently. For each use the real URL of the article. Return ONLY this JSON with no other text:\n{{"items":[{{"tag":"region","headline":"actual news headline from this week","body":"What happened and why it matters. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"region","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+            "prompt": f'Today is {d["today"]}. Search for news published in the past 7 days (after {d["week_start"]}) about the consumer audio market — headphones, earphones, Bluetooth speakers — in North America, Europe, UK, Australia and New Zealand. Search for: "headphone market {d["month"]}", "audio sales {d["month"]}", "consumer electronics news {d["month"]}". Find 5 actual recent news stories. Include the publication date of each article. Return ONLY this JSON with no other text:\n{base}'
         },
         {
             "key": "product",
             "label": "Product News",
             "emoji": "🎯",
-            "prompt": f'Today is {d["today"]}. Search for NEWS published this week (after {d["week_start"]}) about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Search for: "Nothing audio {d["month"]}", "JBL new {d["month"]}", "Soundcore {d["month"]}", "Marshall headphones news {d["year"]}", "Sudio {d["year"]}". Find 5 actual recent news stories — product launches, campaigns, pricing, retail moves. Use real article URLs. Return ONLY this JSON:\n{{"items":[{{"tag":"Brand","headline":"actual news headline","body":"What happened. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Brand","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+            "prompt": f'Today is {d["today"]}. Search for news published in the past 7 days (after {d["week_start"]}) about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Search for: "Nothing audio {d["month"]}", "JBL {d["month"]}", "Soundcore {d["month"]}", "Marshall {d["month"]}", "Sudio {d["month"]}". Find 5 actual recent news stories. Include the publication date of each article. Return ONLY this JSON with no other text:\n{base}'
         },
         {
             "key": "retail",
             "label": "Retail",
             "emoji": "🏪",
-            "prompt": f'Today is {d["today"]}. Search for NEWS published this week (after {d["week_start"]}) about consumer electronics retail. Search for: "Best Buy {d["month"]}", "MediaMarkt {d["month"]}", "Amazon electronics {d["month"]}", "airport retail {d["year"]}", "DTC ecommerce {d["month"]}". Find 5 actual recent news stories about retail changes, shelf resets, sales data, DTC trends, or travel retail. Use real article URLs. Return ONLY this JSON:\n{{"items":[{{"tag":"Retailer","headline":"actual news headline","body":"What happened. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Retailer","headline":"actual news headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+            "prompt": f'Today is {d["today"]}. Search for news published in the past 7 days (after {d["week_start"]}) about consumer electronics retail — Best Buy, MediaMarkt, Currys, Amazon audio, DTC ecommerce, airport retail. Search for: "Best Buy {d["month"]}", "Amazon electronics {d["month"]}", "retail consumer electronics {d["month"]}". Find 5 actual recent news stories. Include the publication date of each article. Return ONLY this JSON with no other text:\n{base}'
         },
         {
             "key": "compliance",
             "label": "Compliance",
             "emoji": "⚖️",
-            "prompt": f'Today is {d["today"]}. Search for regulatory and compliance NEWS published recently (after {d["week_start"]}) affecting consumer electronics in EU, US, UK, Canada, Australia. Search for: "FCC ruling {d["month"]}", "EU electronics regulation {d["month"]}", "UKCA compliance {d["year"]}", "battery regulation {d["month"]}", "consumer electronics compliance {d["month"]}". Find 5 actual recent regulatory updates, notices, or enforcement actions. Use real URLs to official sources or news articles. Return ONLY this JSON:\n{{"items":[{{"tag":"Market","headline":"actual regulatory headline","body":"What changed and the implication. 2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}},{{"tag":"Market","headline":"actual headline","body":"2 sentences.","url":"https://actual-source-url.com","source":"Source Name"}}]}}'
+            "prompt": f'Today is {d["today"]}. Search for regulatory and compliance news published in the past 7 days (after {d["week_start"]}) affecting consumer electronics in EU, US, UK, Canada, Australia. Search for: "FCC {d["month"]}", "EU electronics regulation {d["month"]}", "consumer electronics compliance {d["month"]}", "battery regulation {d["month"]}". Find 5 actual recent regulatory updates. Include the publication date of each. Return ONLY this JSON with no other text:\n{base}'
         },
         {
             "key": "ai",
             "label": "AI Tips & Tricks",
             "emoji": "✦",
-            "prompt": f'Today is {d["today"]}. Search for practical AI news and tips published recently (after {d["week_start"]}) for small businesses and product companies (10-20 people). Search for: "AI for small business {d["month"]}", "Claude tips {d["month"]}", "ChatGPT workflow {d["month"]}", "AI productivity {d["month"]}", "AI tools {d["month"]}". Find 5 actionable and current AI use cases or tool updates relevant to Finance, Operations, Logistics, Sales, or Product. Use real article URLs. Return ONLY this JSON:\n{{"items":[{{"tag":"Function","headline":"actual tip or news headline","body":"What it is and how to use it. 2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}},{{"tag":"Function","headline":"actual headline","body":"2 sentences.","url":"https://actual-article-url.com","source":"Publisher Name"}}]}}'
+            "prompt": f'Today is {d["today"]}. Search for AI news and tips published in the past 7 days (after {d["week_start"]}) relevant to small businesses and product companies. Search for: "AI small business {d["month"]}", "Claude {d["month"]}", "ChatGPT productivity {d["month"]}", "AI tools {d["month"]}". Find 5 actionable recent AI tips or tool updates for Finance, Operations, Logistics, Sales, or Product teams. Include the publication date of each article. Return ONLY this JSON with no other text:\n{base}'
         }
     ]
 
@@ -83,14 +88,14 @@ def research_section(section):
         return section["key"], {"items": []}
 
 
-def generate_intro(client, results):
+def generate_intro(client, results, sections):
     print("  → ✍️  Writing intro...")
     headlines = []
-    for section in make_sections(get_date_context())[:3]:
+    for section in sections[:3]:
         items = results.get(section["key"], {}).get("items", [])
         if items:
             headlines.append(items[0].get("headline", ""))
-    prompt = f"Write a 2-sentence editorial intro for Urbanista's Monday Brief — a weekly intelligence report for a premium audio brand. Tone: sharp, informed, like a smart colleague summarising the week. Based on these top stories this week: {' | '.join(headlines)}. Respond with ONLY the 2 sentences, nothing else."
+    prompt = f"Write a 2-sentence editorial intro for Urbanista's Monday Brief — a weekly intelligence report for a premium audio brand. Tone: sharp, informed, like a smart colleague summarising the week. Based on these top stories: {' | '.join(headlines)}. Respond with ONLY the 2 sentences, nothing else."
     try:
         response = client.messages.create(
             model=MODEL, max_tokens=150,
@@ -125,17 +130,30 @@ def build_card(results, intro, date_str, edition, sections):
                          "isSubtle": True, "size": "Small"})
             continue
         for item in items:
-            body.append({"type": "TextBlock", "text": f"**{item.get('headline','')}**",
-                         "wrap": True, "spacing": "Medium"})
-            body.append({"type": "TextBlock", "text": item.get("body", ""),
-                         "wrap": True, "isSubtle": True, "size": "Small", "spacing": "Small"})
             body.append({"type": "TextBlock",
-                         "text": f"_{item.get('tag','')}_ · [{item.get('source','Source')}]({item.get('url','#')})",
-                         "wrap": True, "size": "ExtraSmall", "color": "Accent", "spacing": "Small"})
+                         "text": f"**{item.get('headline', '')}**",
+                         "wrap": True, "spacing": "Medium"})
+            body.append({"type": "TextBlock",
+                         "text": item.get("body", ""),
+                         "wrap": True, "isSubtle": True, "size": "Small", "spacing": "Small"})
+            # Date + source link on one line
+            date_str_item = item.get("date", "")
+            source = item.get("source", "Source")
+            url = item.get("url", "#")
+            tag = item.get("tag", "")
+            footer = f"_{tag}_"
+            if date_str_item:
+                footer += f" · {date_str_item}"
+            footer += f" · [{source}]({url})"
+            body.append({"type": "TextBlock",
+                         "text": footer,
+                         "wrap": True, "size": "ExtraSmall",
+                         "color": "Accent", "spacing": "Small"})
 
     body.append({"type": "TextBlock",
-                 "text": "Urbanista Monday Brief · Every Monday 08:00 CET · 100% AI researched",
-                 "size": "ExtraSmall", "isSubtle": True, "spacing": "Large", "separator": True})
+                 "text": "Urbanista Monday Brief · Every Monday 08:00 CET · 100% AI researched · Past 7 days",
+                 "size": "ExtraSmall", "isSubtle": True,
+                 "spacing": "Large", "separator": True})
 
     return {
         "type": "message",
@@ -164,7 +182,7 @@ def main():
     sections = make_sections(d)
 
     print(f"\n📰 Urbanista Monday Brief — {date_str}")
-    print(f"   Searching for news from {d['week_start']} onwards")
+    print(f"   News window: {d['week_start']} → {d['today']}")
     print("=" * 52)
     print("\n[1/3] Running all sections in parallel...")
 
@@ -177,7 +195,7 @@ def main():
             results[key] = data
 
     print("\n[2/3] Writing intro and building card...")
-    intro = generate_intro(client, results)
+    intro = generate_intro(client, results, sections)
     card = build_card(results, intro, date_str, edition, sections)
 
     if dry_run:
@@ -185,9 +203,9 @@ def main():
         print(f"\nIntro: {intro}\n")
         for section in sections:
             items = results[section["key"]].get("items", [])
-            print(f"{section['emoji']} {section['label']} ({len(items)} items)")
+            print(f"\n{section['emoji']} {section['label']} ({len(items)} items)")
             for item in items:
-                print(f"  • {item.get('headline','')}")
+                print(f"  • [{item.get('date','')}] {item.get('headline','')}")
                 print(f"    {item.get('url','')}")
     else:
         print("\n[3/3] Posting to Teams...")
