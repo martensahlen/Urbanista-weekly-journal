@@ -35,7 +35,7 @@ def make_sections(d):
             "key": "product",
             "label": "Product News",
             "emoji": "🎯",
-            "prompt": f'Today is {d["today"]}. Search for news published in the past 7 days (after {d["week_start"]}) about these audio brands: Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Search for: "Nothing audio {d["month"]}", "JBL {d["month"]}", "Soundcore {d["month"]}", "Marshall {d["month"]}", "Sudio {d["month"]}". Find 5 actual recent news stories. Include the publication date of each article. Return ONLY this JSON with no other text:\n{base}'
+            "prompt": f'Today is {d["today"]}. Search for news published in the past 7 days (after {d["week_start"]}) about these audio brands: Apple, Beats by Dre, Sony, Nothing, JLab, JBL, Soundcore, Marshall, Sudio. Search for: "Nothing audio {d["month"]}", "JBL {d["month"]}", "Soundcore {d["month"]}", "Marshall {d["month"]}", "Sudio {d["month"]}". Find 5 actual recent news stories. Include the publication date of each article. Return ONLY this JSON with no other text:\n{base}'
         },
         {
             "key": "retail",
@@ -47,7 +47,7 @@ def make_sections(d):
             "key": "compliance",
             "label": "Compliance",
             "emoji": "⚖️",
-            "prompt": f'Today is {d["today"]}. Search for regulatory and compliance news published in the past 7 days (after {d["week_start"]}) affecting consumer electronics in EU, US, UK, Canada, Australia. Search for: "FCC {d["month"]}", "EU electronics regulation {d["month"]}", "consumer electronics compliance {d["month"]}", "battery regulation {d["month"]}". Find 5 actual recent regulatory updates. Include the publication date of each. Return ONLY this JSON with no other text:\n{base}'
+            "prompt": f'Today is {d["today"]}. Search for regulatory and compliance news published in the past 7 days (after {d["week_start"]}) affecting consumer electronics in EU, UK, US, Canada, Australia, New Zeeland. Search for: "FCC {d["month"]}", "EU electronics regulation {d["month"]}", "consumer electronics compliance {d["month"]}", "battery regulation {d["month"]}". Find 5 actual recent regulatory updates. Include the publication date of each. Return ONLY this JSON with no other text:\n{base}'
         },
         {
             "key": "ai",
