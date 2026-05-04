@@ -11,7 +11,7 @@ Setup:
 import os, sys, json, datetime, re, requests, anthropic
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-4-5"
 
 SECTIONS = [
     {
